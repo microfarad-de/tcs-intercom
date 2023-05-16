@@ -45,6 +45,6 @@ ARDMK_DIR = arduino-mk
 
 USER_LIB_PATH = src
 #ARDUINO_LIB_PATH = ../libraries
-ARDUINO_LIBS = Adc Cli Button Led Nvm EEPROM
+ARDUINO_LIBS = Cli Nvm EEPROM
 
 include ${ARDMK_DIR}/Arduino.mk

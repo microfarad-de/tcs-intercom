@@ -24,6 +24,10 @@
         "vector": "cpp",
         "array": "cpp",
         "utility": "cpp",
-        "cstdarg": "cpp"
+        "cstdarg": "cpp",
+        "__locale": "cpp",
+        "__string": "cpp",
+        "string": "cpp",
+        "string_view": "cpp"
     }
 }
