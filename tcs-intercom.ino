@@ -43,6 +43,9 @@
 #define VERSION_MAINT 0  // Maintenance version
 
 #include <Arduino.h>
+#include <avr/sleep.h>
+#include <avr/power.h>
+#include <avr/wdt.h>
 #include "src/Cli/Cli.h"
 #include "src/Nvm/Nvm.h"
 
@@ -62,7 +65,7 @@
 #define ZERO_BIT         2       // ms
 #define SERIAL_NO        240011  // 3A98B Imdoor unit serial number
 #define CMD_OPEN_DOOR    0x13A98B80
-#define CMD_OUTDOOR_RING 0x03A98B80 // 0x3a98b81
+#define CMD_OUTDOOR_RING 0x03A98B81 // 0x03A98B80
 #define CMD_INDOOR_RING  0x13A98B41
 #define CMD_
 
@@ -81,6 +84,7 @@ int  cmdOpenDoor (int argc, char **argv);
 int  cmdOutdoorRing (int argc, char **argv);
 int  cmdIndoorRing (int argc, char **argv);
 int  cmdTest (int argc, char **argv);
+void powerSave (void);
 
 
 
@@ -88,6 +92,11 @@ int  cmdTest (int argc, char **argv);
 void setup() {
   pinMode(OUTPUT_PIN, OUTPUT);
   digitalWrite(OUTPUT_PIN, LOW);
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  ADCSRA &= ~_BV(ADEN);             // Disable ADC, see ATmega328P datasheet Section 28.9.2
+  power_adc_disable ();             //
 
   ACSR =
     (0 << ACD) |    // Analog Comparator: Enabled
@@ -114,41 +123,52 @@ void setup() {
 
 String inData;
 void loop() {
+  static uint32_t ledTs = 0;
+  uint32_t ts = millis ();
 
   Cli.getCmd ();
 
   if (cmdReady) {
     cmdReady = 0;
     if (lengthCMD == 1) {
-      Cli.xprintf("Received command: 0x%08lx\r\n", CMD);
+      Cli.xprintf("Received command: 0x%08lX\r\n", CMD);
     }
     else {
-      Cli.xprintf("Received command: 0x%04lx\r\n", CMD);
+      Cli.xprintf("Received command: 0x%04lX\r\n", CMD);
     }
 
-    if (CMD == CMD_OUTDOOR_RING) {
+    if (((CMD ^ CMD_OUTDOOR_RING) & 0xFFFFFF00) == 0) {
       delay(1000);
       Serial.println (F("Opening door"));
       sendeProtokollHEX (CMD_OPEN_DOOR);
     }
+
+    digitalWrite (LED_BUILTIN, HIGH);
+    ledTs = ts;
   }
+
+  if (ts - ledTs >= 1000) {
+    digitalWrite (LED_BUILTIN, LOW);
+  }
+
+  //powerSave ();
 }
 
 
 int cmdOpenDoor (int argc, char **argv) {
-  Cli.xprintf ("Sent command: 0x%08lx\r\n", CMD_OPEN_DOOR);
+  Cli.xprintf ("Sent command: 0x%08lX\r\n", CMD_OPEN_DOOR);
   sendeProtokollHEX (CMD_OPEN_DOOR);
   return 0;
 }
 
 int cmdOutdoorRing (int argc, char **argv) {
-  Cli.xprintf ("Sent command: 0x%08lx\r\n", CMD_OUTDOOR_RING);
+  Cli.xprintf ("Sent command: 0x%08lX\r\n", CMD_OUTDOOR_RING);
   sendeProtokollHEX (CMD_OUTDOOR_RING);
   return 0;
 }
 
 int cmdIndoorRing (int argc, char **argv) {
-  Cli.xprintf ("Sent command: 0x%08lx\r\n", CMD_INDOOR_RING);
+  Cli.xprintf ("Sent command: 0x%08lX\r\n", CMD_INDOOR_RING);
   sendeProtokollHEX (CMD_INDOOR_RING);
   return 0;
 }
@@ -160,6 +180,18 @@ int cmdTest (int argc, char **argv) {
   delay(2000);
   digitalWrite(OUTPUT_PIN, LOW);
   return 0;
+}
+
+
+void powerSave (void) {
+  // enter sleep, wakeup will be triggered by the
+  // next Timer 0 interrupt (millis tick)
+  set_sleep_mode (SLEEP_MODE_IDLE); // configure lowest sleep mode that keeps clk_IO for Timer 1
+  cli ();
+  sleep_enable ();
+  sei ();
+  sleep_cpu ();
+  sleep_disable ();
 }
 
 
