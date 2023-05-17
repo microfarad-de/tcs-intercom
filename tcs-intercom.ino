@@ -36,7 +36,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Version: 1.0.0
- * Date:    May 09, 2023
+ * Date:    May 17, 2023
  */
 #define VERSION_MAJOR 1  // Major version
 #define VERSION_MINOR 0  // Minor version
@@ -48,8 +48,10 @@
 #include <avr/wdt.h>
 #include "src/Cli/Cli.h"
 #include "src/Nvm/Nvm.h"
+#include "src/Led/Led.h"
 
-
+// Enable debug code
+#define DEBUG(_X) //_X
 
 /*
  * Pin assignment
@@ -59,154 +61,447 @@
 /*
  * Configuration parameters
  */
-#define SERIAL_BAUD      115200  // Serial communication baud rate
-#define START_BIT        6       // ms
-#define ONE_BIT          4       // ms
-#define ZERO_BIT         2       // ms
-#define SERIAL_NO        240011  // 3A98B Imdoor unit serial number
-#define CMD_OPEN_DOOR    0x13A98B80
-#define CMD_OUTDOOR_RING 0x03A98B81 // 0x03A98B80
-#define CMD_INDOOR_RING  0x13A98B41
-#define CMD_
+#define SERIAL_BAUD          115200  // Serial communication baud rate
+#define START_BIT            6       // Protocol start bit duration in ms
+#define ONE_BIT              4       // Protocol 1 bit duration in ms
+#define ZERO_BIT             2       // Protocol 0 bit duration in ms
+#define ENTRY_CODE_SIZE      8       // Entry code array size
+#define ENTRY_CODE_THR       1000    // Entry code duration threshold in ms
+#define ENTRY_CODE_TIMEOUT   5000    // Entry code timeout duration in ms
+#define PSV_DISABLE_DURATION  500    // Power save disabling duration in ms
+#define DEFAULT_SERIAL_NO    240011  // 3A98B Default indoor unit serial number
 
 /*
- * Global variables
+ * Known intercom commands
  */
-volatile uint32_t CMD = 0;
-volatile uint8_t lengthCMD = 0;
-volatile bool cmdReady;
+#define CMD_OPEN_DOOR    0x10000080  // 0x13A98B80
+#define CMD_OUTDOOR_RING 0x00000080  // 0x03A98B81 0x03A98B80
+#define CMD_INDOOR_RING  0x10000041  // 0x13A98B41
+#define CMD_LIGHT_ON     0x1200
+#define CMD_SERIAL_MASK  0x0FFFFF00  // Mask the serial number bits of a command
+#define CMD_CONSTRUCT(_CMD) (_CMD & (~CMD_SERIAL_MASK)) | ((Nvm.serialNo << 8) & CMD_SERIAL_MASK);  // Constructs a command by adding the serial No
+
+
+// Command Length
+enum CmdLength_e {
+  LEN_16BIT  = 0,
+  LEN_32BIT  = 1
+};
+
+
+// Entry code values
+enum EntryCode_e {
+  CODE_SHORT = 0,   // Corresponds to a short delay between two consecutive ring button presses
+  CODE_LONG  = 1,   // Corresponds to a long delay between two consecutive ring button presses
+  CODE_END   = 255  // Corresponds to the end of the code sequence
+};
+
+
+// Volatile variables used inside the ISR
+struct {
+  volatile uint32_t    cmd     = 0;            // Decoded command payload
+  volatile CmdLength_e cmdLength = LEN_16BIT;  // Command length
+  volatile bool        cmdReady;               // Command ready flag
+} Isr;
+
+
+// Configuration parameters stored in EEPROM (Nvm)
+struct Nvm_t {
+  uint32_t serialNo;                   // Indoor unit serial number
+  uint8_t  entryCode[ENTRY_CODE_SIZE]; // Entry code characters of type EntryCode_e
+} Nvm;
+
+
+// NVM backup copy
+Nvm_t NvmBak;
+
+
+// LED object
+LedClass Led;
+
 
 /*
  * Function declarations
  */
-void sendeProtokollHEX(uint32_t protokoll);
-int  cmdOpenDoor (int argc, char **argv);
-int  cmdOutdoorRing (int argc, char **argv);
-int  cmdIndoorRing (int argc, char **argv);
-int  cmdTest (int argc, char **argv);
-void powerSave (void);
+bool nvmValidate       (void);
+void nvmRead           (void);
+void nvmWrite          (void);
+void sendTcsBusCommand (uint32_t cmd, CmdLength_e cmdLen = LEN_32BIT);
+void sendCommand       (uint32_t cmd, CmdLength_e cmdLen = LEN_32BIT);
+void powerSave         (void);
+int  cmdOpenDoor       (int argc, char **argv);
+int  cmdOutdoorRing    (int argc, char **argv);
+int  cmdIndoorRing     (int argc, char **argv);
+int  cmdTest           (int argc, char **argv);
+int  cmdRom            (int argc, char **argv);
+int  cmdSetSerial      (int argc, char **argv);
+int  cmdSetEntryCode   (int argc, char **argv);
 
 
-
-
+/*
+ * Arduino initialization routine
+ */
 void setup() {
-  pinMode(OUTPUT_PIN, OUTPUT);
-  digitalWrite(OUTPUT_PIN, LOW);
-  pinMode(LED_BUILTIN, OUTPUT);
-  digitalWrite(LED_BUILTIN, HIGH);
+  pinMode      (OUTPUT_PIN, OUTPUT);
+  digitalWrite (OUTPUT_PIN, LOW);
 
-  ADCSRA &= ~_BV(ADEN);             // Disable ADC, see ATmega328P datasheet Section 28.9.2
-  power_adc_disable ();             //
+  // Disable non needed peripherals for power saving
+  ADCSRA &= ~_BV(ADEN);    // Disable ADC, see ATmega328P datasheet Section 28.9.2
+  power_all_disable   ();  // Disable peripherals
+  power_usart0_enable ();  // Enable serial port
+  power_timer0_enable ();  // Enable Timer 0 (required for millis() and micros())
 
   ACSR =
-    (0 << ACD) |    // Analog Comparator: Enabled
-    (0 << ACBG) |   // Analog Comparator Bandgap Select: AIN0 is applied to the positive input
-    (0 << ACO) |    // Analog Comparator Output: Off
-    (1 << ACI) |    // Analog Comparator Interrupt Flag: Clear Pending Interrupt
-    (1 << ACIE) |   // Analog Comparator Interrupt: Enabled
-    (0 << ACIC) |   // Analog Comparator Input Capture: Disabled
-    (0 << ACIS1) | (0 << ACIS0);   // Analog Comparator Interrupt Mode: Comparator Interrupt on changing Edge
+    (0 << ACD)   |  // Analog comparator: Enabled
+    (0 << ACBG)  |  // Analog comparator bandgap Select: AIN0 is applied to the positive input
+    (0 << ACO)   |  // Analog comparator output: Off
+    (1 << ACI)   |  // Analog comparator interrupt Flag: Clear pending interrupt
+    (1 << ACIE)  |  // Analog comparator interrupt: Enabled
+    (0 << ACIC)  |  // Analog comparator input capture: Disabled
+    (0 << ACIS1) | (0 << ACIS0);  // Analog comparator interrupt mode: Comparator Interrupt on changing edge
 
+  Led.initialize (LED_BUILTIN);
   Cli.init ( SERIAL_BAUD );
 
   Serial.println ("");
-  Serial.println (F("+ + +  T C S  I N T E R C O M  C O N T R O L  + + +"));
+  Serial.println (F("+ + +  I N T E R C O M  C O N T R O L  + + +"));
   Serial.println ("");
   Cli.xprintf    ("V %d.%d.%d\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_MAINT);
   Serial.println ("");
-  Cli.newCmd     ("o" , "Open door" , cmdOpenDoor);
-  Cli.newCmd     ("r" , "Outdoor ring" , cmdOutdoorRing);
-  Cli.newCmd     ("i" , "Indoor ring" , cmdIndoorRing);
-  //Cli.newCmd     ("t" , "Test routine" , cmdTest);
-  Cli.showHelp ();
+  Cli.newCmd     ("o"  , "Open door" , cmdOpenDoor);
+  Cli.newCmd     ("or" , "Outdoor ring" , cmdOutdoorRing);
+  Cli.newCmd     ("ir" , "Indoor ring" , cmdIndoorRing);
+  Cli.newCmd     ("r"  , "Show the system configuration", cmdRom);
+  Cli.newCmd     ("code"   , "Set the door entry code (arg: [binary code, eg. 1101])", cmdSetEntryCode);
+  Cli.newCmd     ("serial" , "Set the indoor unit serial number (arg: <number>)"     , cmdSetSerial);
+  Cli.showHelp   ();
+
+  nvmRead ();
 }
 
-String inData;
-void loop() {
-  static uint32_t ledTs = 0;
-  uint32_t ts = millis ();
+
+/*
+ * Arduino main loop
+ */
+void loop () {
+  static enum {STATE_WAIT, STATE_READ, STATE_OPEN} state = STATE_WAIT;
+  static uint32_t cmdTs   = 0;
+  static uint32_t cmdDt   = 0;
+  static uint8_t  codeIdx = 0;
+  uint32_t ts      = millis ();
+  uint32_t cmdRing = CMD_CONSTRUCT(CMD_OUTDOOR_RING);
 
   Cli.getCmd ();
 
-  if (cmdReady) {
-    cmdReady = 0;
-    if (lengthCMD == 1) {
-      Cli.xprintf("Received command: 0x%08lX\r\n", CMD);
+  Led.loopHandler ();
+
+  if (Isr.cmdReady) {
+    Isr.cmdReady = false;
+
+    Led.blink (1, 100, 200);
+
+    Serial.print(F("Received command: "));
+    if (Isr.cmdLength == LEN_32BIT) {
+      Cli.xprintf ("0x%08lX\r\n\r\n", Isr.cmd);
     }
     else {
-      Cli.xprintf("Received command: 0x%04lX\r\n", CMD);
+      Cli.xprintf ("0x%04lX\r\n\r\n", Isr.cmd);
     }
 
-    if (((CMD ^ CMD_OUTDOOR_RING) & 0xFFFFFF00) == 0) {
+    // Outdoor ring button was pressed
+    if (((Isr.cmd ^ cmdRing) & 0xFFFFFFF0) == 0) {
+    //if (Isr.cmd == 0x1200) {
+      Led.blinkStop ();
+      cmdDt = ts - cmdTs;
+      cmdTs = ts;
+    }
+  }
+
+  // Entry code detection state machine
+  switch (state) {
+    // Waiting for input
+    case STATE_WAIT:
+      // Command received
+      if (cmdDt > 0) {
+        DEBUG(Serial.println("START\r\n");)
+        Led.blink (1, 100, 200);
+        codeIdx = 0;
+        cmdDt   = 0;
+        state   = STATE_READ;
+      }
+      break;
+
+    // Reading user input
+    case STATE_READ:
+      // Command received
+      if (cmdDt > 0) {
+        // Short duration
+        if (Nvm.entryCode[codeIdx] == CODE_SHORT) {
+          if (cmdDt < ENTRY_CODE_THR) {
+            DEBUG(Cli.xprintf ("SHORT OK idx = %d\r\n\r\n", codeIdx);)
+            Led.blink (1, 100, 200);
+            codeIdx++;
+          }
+          else {
+            DEBUG(Cli.xprintf ("SHORT NOK idx = %d\r\n\r\n", codeIdx);)
+            Led.blink (2, 100, 200);
+            state = STATE_WAIT;
+          }
+        }
+        // Long duration
+        else if (Nvm.entryCode[codeIdx] == CODE_LONG) {
+          if (cmdDt > ENTRY_CODE_THR) {
+            DEBUG(Cli.xprintf ("LONG OK idx = %d\r\n\r\n", codeIdx);)
+            Led.blink (1, 100, 200);
+            codeIdx++;
+          }
+          else {
+            DEBUG(Cli.xprintf ("LONG NOK idx = %d\r\n\r\n", codeIdx);)
+            Led.blink (2, 100, 200);
+            state = STATE_WAIT;
+          }
+        }
+        cmdDt = 0;
+      }
+      // Cmmand end
+      if (Nvm.entryCode[codeIdx] == CODE_END) {
+        state = STATE_OPEN;
+      }
+      break;
+
+    // Open the door
+    case STATE_OPEN:
+      DEBUG(Serial.println("OPEN\r\n");)
       delay(1000);
-      Serial.println (F("Opening door"));
-      sendeProtokollHEX (CMD_OPEN_DOOR);
-    }
+      Led.blink (1, 1000, 0);
+      sendCommand (CMD_OPEN_DOOR, LEN_32BIT); // CMD_INDOOR_RING
+      state = STATE_WAIT;
+      break;
 
-    digitalWrite (LED_BUILTIN, HIGH);
-    ledTs = ts;
+    default:
+      break;
   }
 
-  if (ts - ledTs >= 1000) {
-    digitalWrite (LED_BUILTIN, LOW);
+  // Code word overflow
+  if (codeIdx >= ENTRY_CODE_SIZE) state = STATE_READ;
+
+  // Timeout
+  if (ts - cmdTs > ENTRY_CODE_TIMEOUT && state != STATE_WAIT) {
+    DEBUG(Serial.println("TIMEOUT\r\n");)
+    Led.blink (3, 100, 200);
+    state = STATE_WAIT;
   }
 
-  //powerSave ();
+  if (state == STATE_WAIT && Led.blinking == false) {
+    // Deep sleep
+    powerSave ();
+  }
+}
+
+/*
+ * Wrapper funciton for sending TCS bus commands
+ */
+void sendCommand (uint32_t cmd, CmdLength_e cmdLen) {
+  uint32_t c = CMD_CONSTRUCT (cmd);
+  Serial.print(F("Sent command: "));
+  if (cmdLen == LEN_32BIT) {
+    Cli.xprintf ("0x%08lX\r\n\r\n", c);
+  }
+  else {
+    Cli.xprintf ("0x%04lX\r\n\r\n", c);
+  }
+  sendTcsBusCommand (c, cmdLen);
 }
 
 
+/*
+ * Command handler functions
+ */
 int cmdOpenDoor (int argc, char **argv) {
-  Cli.xprintf ("Sent command: 0x%08lX\r\n", CMD_OPEN_DOOR);
-  sendeProtokollHEX (CMD_OPEN_DOOR);
+  sendCommand (CMD_OPEN_DOOR, LEN_32BIT);
   return 0;
 }
-
 int cmdOutdoorRing (int argc, char **argv) {
-  Cli.xprintf ("Sent command: 0x%08lX\r\n", CMD_OUTDOOR_RING);
-  sendeProtokollHEX (CMD_OUTDOOR_RING);
+  sendCommand (CMD_OUTDOOR_RING, LEN_32BIT);
   return 0;
 }
-
 int cmdIndoorRing (int argc, char **argv) {
-  Cli.xprintf ("Sent command: 0x%08lX\r\n", CMD_INDOOR_RING);
-  sendeProtokollHEX (CMD_INDOOR_RING);
+  sendCommand (CMD_INDOOR_RING, LEN_32BIT);
   return 0;
 }
 
 
-int cmdTest (int argc, char **argv) {
-  Serial.println(F("Running test routine"));
-  digitalWrite(OUTPUT_PIN, HIGH);
-  delay(2000);
-  digitalWrite(OUTPUT_PIN, LOW);
+/*
+ * CLI command for setting the device serial number
+ */
+int cmdSetSerial (int argc, char **argv) {
+  if (argc != 2) {
+    Cli.xprintf ("Usage: %s <number>\r\n\r\n", argv[0]);
+    return 1;
+  }
+  Nvm.serialNo = atol (argv[1]);
+  nvmWrite ();
+  cmdRom (1, nullptr);
   return 0;
 }
 
 
+/*
+ * CLI command for setting the entry code
+ */
+int cmdSetEntryCode (int argc, char **argv) {
+  uint8_t i;
+  if (argc < 2) {
+    Nvm.entryCode[0] = CODE_END;
+  }
+  else {
+    for (i = 0; i < ENTRY_CODE_SIZE - 1; i++) {
+      char c = argv[1][i];
+      if (c == '\0') {
+        break;
+      }
+      else if (c < '0' || c > '1') {
+        Serial.println (F("Invalid argument (must be a string of 0/1)\r\n"));
+        return 1;
+      }
+      else {
+        Nvm.entryCode[i] = c - '0';
+      }
+    }
+    Nvm.entryCode[i] = CODE_END;
+  }
+  nvmWrite ();
+  cmdRom (1, nullptr);
+  return 0;
+}
+
+
+/*
+ * CLI command for displaying the EEPROM data
+ */
+int cmdRom (int argc, char **argv) {
+  bool noEntryCode = true;
+  Serial.println (F("System configuration:"));
+  Cli.xprintf    (  "  Serial No  = %ld (0x%lX)\r\n", Nvm.serialNo, Nvm.serialNo);
+  Serial.print   (F("  Entry code = "));
+  for (uint8_t i = 0; i < ENTRY_CODE_SIZE; i ++) {
+    if (Nvm.entryCode[i] <= CODE_LONG) {
+      Cli.xputchar (Nvm.entryCode[i] + '0');
+      noEntryCode = false;
+    }
+    else {
+      break;
+    }
+  }
+  if (noEntryCode) {
+    Serial.print(F("n/a"));
+  }
+  Serial.println ("");
+  Serial.println ("");
+  return 0;
+}
+
+
+/*
+ * Validate EEPROM data
+ */
+bool nvmValidate (void) {
+  bool valid = true;
+
+  for (uint8_t i = 0; i < ENTRY_CODE_SIZE; i++) {
+    if (Nvm.entryCode[i] ==  CODE_END) {
+      break;
+    }
+    else if (Nvm.entryCode[i] > CODE_LONG) {
+      Nvm.entryCode[i] = CODE_END;
+      valid = false;
+      break;
+    }
+    if (i == ENTRY_CODE_SIZE - 1 && Nvm.entryCode[i] != CODE_END) {
+      Nvm.entryCode[i] = CODE_END;
+      valid = false;
+    }
+  }
+
+  if ((Nvm.serialNo & 0xFFF00000) != 0 || Nvm.serialNo == 0) {
+    if ((NvmBak.serialNo & 0xFFF00000) != 0 || NvmBak.serialNo == 0) {
+      Nvm.serialNo = DEFAULT_SERIAL_NO;
+    }
+    else {
+      Nvm.serialNo = NvmBak.serialNo;
+    }
+    valid = false;
+  }
+
+  NvmBak = Nvm;
+
+  if (!valid) {
+    Serial.println (F("Validation error"));
+    nvmWrite ();
+  }
+  return valid;
+}
+
+
+/*
+ * Read EEPROM data
+ */
+void nvmRead (void) {
+  eepromRead (0x0, (uint8_t*)&Nvm,    sizeof (Nvm_t));
+  eepromRead (0x0, (uint8_t*)&NvmBak, sizeof (Nvm_t));
+  nvmValidate ();
+}
+
+
+/*
+ * Write EEPROM data
+ */
+void nvmWrite (void) {
+  nvmValidate ();
+  eepromWrite (0x0, (uint8_t*)&Nvm, sizeof (Nvm));
+}
+
+
+/*
+ * Power saving routine
+ * Enables CPU sleep mode
+ */
 void powerSave (void) {
-  // enter sleep, wakeup will be triggered by the
-  // next Timer 0 interrupt (millis tick)
-  set_sleep_mode (SLEEP_MODE_IDLE); // configure lowest sleep mode that keeps clk_IO for Timer 1
+  static uint32_t enTs = 0;
+  uint32_t        ts   = millis ();
+
+  // Delay power saving
+  if (ts - enTs <= PSV_DISABLE_DURATION) {
+    return;
+  }
+
+  power_timer0_disable ();           // Disables millis() timer0 tick
+  set_sleep_mode (SLEEP_MODE_IDLE);  // Lowest power mode supports wakeup on analog compare
   cli ();
-  sleep_enable ();
+  sleep_enable ();                   // Enter sleep, wakeup will be triggered by the next analog compare interrupt
   sei ();
   sleep_cpu ();
-  sleep_disable ();
+  sleep_disable ();;
+  power_timer0_enable ();
+
+  // Disable power save for PSV_DISABLE_DUR
+  ts   = millis ();
+  enTs = ts;
 }
 
 
-//it is better to also give an arg with the length because it
-//is possible that there is a 4Byte protokoll smaller than 0xFFFF
-//something like void sendeProtokollHEX(uint32_t protokoll,byte firstBit) {
-//  int length = 16;
-//  byte checksm = 1;
-//  if (firstBit) length = 32;
-//and so on...
-void sendeProtokollHEX(uint32_t protokoll) {
-  int length = 16;
-  byte checksm = 1;
-  byte firstBit = 0;
-  if (protokoll > 0xFFFF) {
+/*
+ * Send a message to the TCS bus
+ * Credit: https://github.com/atc1441/TCSintercomArduino
+ *
+ * cmd:     Command (16 or 32 bit long)
+ * cmdLen:  Command length
+ */
+void sendTcsBusCommand (uint32_t cmd, CmdLength_e cmdLen) {
+  uint8_t length = 16;
+  uint8_t checksm = 1;
+  uint8_t firstBit = 0;
+  if (cmdLen == LEN_32BIT) {
     length = 32;
     firstBit = 1;
   }
@@ -214,9 +509,9 @@ void sendeProtokollHEX(uint32_t protokoll) {
   delay(START_BIT);
   digitalWrite(OUTPUT_PIN, !digitalRead(OUTPUT_PIN));
   delay(firstBit ? ONE_BIT : ZERO_BIT);
-  int curBit = 0;
-  for (byte i = length; i > 0; i--) {
-    curBit = bitRead(protokoll, i - 1);
+  uint8_t curBit = 0;
+  for (uint8_t i = length; i > 0; i--) {
+    curBit = bitRead(cmd, i - 1);
     digitalWrite(OUTPUT_PIN, !digitalRead(OUTPUT_PIN));
     delay(curBit ? ONE_BIT : ZERO_BIT);
     checksm ^= curBit;
@@ -227,20 +522,25 @@ void sendeProtokollHEX(uint32_t protokoll) {
 }
 
 
-ISR(ANALOG_COMP_vect ) {
-  static uint32_t curCMD;
+/*
+ * Analog comparator ISR for detecting valid TCS bus commands
+ * Credit: https://github.com/atc1441/TCSintercomArduino
+ */
+ISR (ANALOG_COMP_vect ) {
+  static uint32_t curCmd;
   static uint32_t usLast;
-  static byte curCRC;
-  static byte calCRC;
-  static byte curLength;
-  static byte cmdIntReady;
-  static byte curPos;
+  static uint8_t curCRC;
+  static uint8_t calCRC;
+  static uint8_t curLength;
+  static uint8_t cmdIntReady;
+  static uint8_t curPos;
   uint32_t usNow = micros();
   uint32_t timeInUS = usNow - usLast;
   usLast = usNow;
-  byte curBit = 4;
+  uint8_t curBit = 4;
+
   if (timeInUS < 1000) {
-    curBit = 5; // invalid glitches typical 29ms
+    curBit = 5;  // Invalid glitches typical 29ms
   } else if (timeInUS >= 1000 && timeInUS <= 2999) {
     curBit = 0;
   } else if (timeInUS >= 3000 && timeInUS <= 4999) {
@@ -252,12 +552,12 @@ ISR(ANALOG_COMP_vect ) {
     curPos = 0;
   }
 
-  if (curBit != 5) { // skip processing for glitches
+  if (curBit != 5) {  // Skip processing for glitches
     if (curPos == 0) {
       if (curBit == 2) {
         curPos++;
       }
-      curCMD = 0;
+      curCmd = 0;
       curCRC = 0;
       calCRC = 1;
       curLength = 0;
@@ -266,12 +566,12 @@ ISR(ANALOG_COMP_vect ) {
         curLength = curBit;
         curPos++;
       } else if (curPos >= 2 && curPos <= 17) {
-        if (curBit)bitSet(curCMD, (curLength ? 33 : 17) - curPos);
+        if (curBit) bitSet(curCmd, (curLength ? 33 : 17) - curPos);
         calCRC ^= curBit;
         curPos++;
       } else if (curPos == 18) {
         if (curLength) {
-          if (curBit)bitSet(curCMD, 33 - curPos);
+          if (curBit) bitSet(curCmd, 33 - curPos);
           calCRC ^= curBit;
           curPos++;
         } else {
@@ -279,7 +579,7 @@ ISR(ANALOG_COMP_vect ) {
           cmdIntReady = 1;
         }
       } else if (curPos >= 19 && curPos <= 33) {
-        if (curBit)bitSet(curCMD, 33 - curPos);
+        if (curBit) bitSet(curCmd, 33 - curPos);
         calCRC ^= curBit;
         curPos++;
       } else if (curPos == 34) {
@@ -293,11 +593,11 @@ ISR(ANALOG_COMP_vect ) {
       cmdIntReady = 0;
       curPos = 0;
       if (curCRC == calCRC) {
-        cmdReady = 1;
-        lengthCMD = curLength;
-        CMD = curCMD;
+        Isr.cmdReady = true;
+        Isr.cmdLength = curLength ? LEN_32BIT : LEN_16BIT;
+        Isr.cmd = curCmd;
       }
-      curCMD = 0;
+      curCmd = 0;
     }
   }
 }

@@ -7,3 +7,6 @@
 [submodule "src/Nvm"]
 	path = src/Nvm
 	url = ssh://git@github.com/arduino-library/Nvm
+[submodule "src/Led"]
+	path = src/Led
+	url = ssh://git@github.com/arduino-library/Led
