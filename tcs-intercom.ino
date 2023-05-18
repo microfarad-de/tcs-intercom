@@ -207,10 +207,9 @@ void loop () {
       Cli.xprintf ("0x%04lX\r\n\r\n", Isr.cmd);
     }
 
-    // Outdoor ring button was pressed
+    // Ring button was pressed
     if (((Isr.cmd ^ cmdOutRing) & 0xFFFFFFF0) == 0 ||
         ((Isr.cmd ^ cmdInRing)  & 0xFFFFFFF0) == 0) {
-    //if (Isr.cmd == 0x1200) {
       Led.blinkStop ();
       cmdDt = ts - cmdTs;
       cmdTs = ts;
@@ -283,7 +282,7 @@ void loop () {
   }
 
   // Code word overflow
-  if (codeIdx >= ENTRY_CODE_SIZE) state = STATE_READ;
+  if (codeIdx >= ENTRY_CODE_SIZE) state = STATE_WAIT;
 
   // Timeout
   if (ts - cmdTs > ENTRY_CODE_TIMEOUT && state != STATE_WAIT) {
