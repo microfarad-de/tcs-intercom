@@ -6,10 +6,6 @@
  * This sketch has been implemented and tested on an ATMega328P based Arduino Pro Mini
  * compatible board.
  *
- * In order to eliminate the bootloader delay, it necessary to flash the modified
- * Arduino bootloarder by following the instructions in:
- * https://github.com/microfarad-de/bootloader
- *
  * This source file is part of the follwoing repository:
  * http://www.github.com/microfarad-de/tcs-intercom
  *
@@ -78,6 +74,7 @@
 #define CMD_OUTDOOR_RING 0x00000080  // 0x03A98B81 0x03A98B80
 #define CMD_INDOOR_RING  0x10000041  // 0x13A98B41
 #define CMD_LIGHT_ON     0x1200
+#define CMD_CUSTOM_BTN   0x63A98B08
 #define CMD_SERIAL_MASK  0x0FFFFF00  // Mask the serial number bits of a command
 #define CMD_CONSTRUCT(_CMD) (_CMD & (~CMD_SERIAL_MASK)) | ((Nvm.serialNo << 8) & CMD_SERIAL_MASK);  // Constructs a command by adding the serial No
 
@@ -189,7 +186,8 @@ void loop () {
   static uint32_t cmdDt   = 0;
   static uint8_t  codeIdx = 0;
   uint32_t ts      = millis ();
-  uint32_t cmdRing = CMD_CONSTRUCT(CMD_OUTDOOR_RING);
+  uint32_t cmdOutRing = CMD_CONSTRUCT(CMD_OUTDOOR_RING);
+  uint32_t cmdInRing  = CMD_CONSTRUCT(CMD_INDOOR_RING);
 
   Cli.getCmd ();
 
@@ -209,7 +207,8 @@ void loop () {
     }
 
     // Outdoor ring button was pressed
-    if (((Isr.cmd ^ cmdRing) & 0xFFFFFFF0) == 0) {
+    if (((Isr.cmd ^ cmdOutRing) & 0xFFFFFFF0) == 0 ||
+        ((Isr.cmd ^ cmdInRing)  & 0xFFFFFFF0) == 0) {
     //if (Isr.cmd == 0x1200) {
       Led.blinkStop ();
       cmdDt = ts - cmdTs;
@@ -271,7 +270,7 @@ void loop () {
 
     // Open the door
     case STATE_OPEN:
-      DEBUG(Serial.println("OPEN\r\n");)
+      Serial.println("DOOR OPEN\r\n");
       delay(1000);
       Led.blink (1, 1000, 0);
       sendCommand (CMD_OPEN_DOOR, LEN_32BIT); // CMD_INDOOR_RING
