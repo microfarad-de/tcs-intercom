@@ -64,17 +64,17 @@
 #define ENTRY_CODE_SIZE      8       // Entry code array size
 #define ENTRY_CODE_THR       1000    // Entry code duration threshold in ms
 #define ENTRY_CODE_TIMEOUT   5000    // Entry code timeout duration in ms
-#define PSV_DISABLE_DURATION  500    // Power save disabling duration in ms
-#define DEFAULT_SERIAL_NO    240011  // 3A98B Default indoor unit serial number
+#define PSV_DISABLE_DURATION 500     // Power save disabling duration in ms
+#define DEFAULT_SERIAL_NO    12345   // Default indoor unit serial number
 
 /*
  * Known intercom commands
  */
-#define CMD_OPEN_DOOR    0x10000080  // 0x13A98B80
-#define CMD_OUTDOOR_RING 0x00000080  // 0x03A98B81 0x03A98B80
-#define CMD_INDOOR_RING  0x10000041  // 0x13A98B41
+#define CMD_OPEN_DOOR    0x10000080
+#define CMD_OUTDOOR_RING 0x00000080
+#define CMD_INDOOR_RING  0x10000041
 #define CMD_LIGHT_ON     0x1200
-#define CMD_CUSTOM_BTN   0x63A98B08
+#define CMD_CUSTOM_BTN   0x60000008
 #define CMD_SERIAL_MASK  0x0FFFFF00  // Mask the serial number bits of a command
 #define CMD_CONSTRUCT(_CMD) (_CMD & (~CMD_SERIAL_MASK)) | ((Nvm.serialNo << 8) & CMD_SERIAL_MASK);  // Constructs a command by adding the serial No
 
@@ -273,7 +273,7 @@ void loop () {
       Serial.println("DOOR OPEN\r\n");
       delay(1000);
       Led.blink (1, 1000, 0);
-      sendCommand (CMD_OPEN_DOOR, LEN_32BIT); // CMD_INDOOR_RING
+      sendCommand (CMD_OPEN_DOOR, LEN_32BIT);
       state = STATE_WAIT;
       break;
 

@@ -12,8 +12,6 @@ Unless stated otherwise within the source file headers, please feel free to use 
 
 ## Circuit Diagram
 
-Following is the water sensor circuit diagraom:
-
 <p align="center">
 <img src="https://raw.githubusercontent.com/microfarad-de/tcs-intercom/master/doc/tcs-intercom-schematic.png" alt="drawing" width="600"/>
 </p>
