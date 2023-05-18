@@ -32,7 +32,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Version: 1.0.0
- * Date:    May 17, 2023
+ * Date:    May 18, 2023
  */
 #define VERSION_MAJOR 1  // Major version
 #define VERSION_MINOR 0  // Minor version
