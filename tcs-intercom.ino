@@ -480,7 +480,7 @@ void powerSave (void) {
   sleep_enable ();                   // Enter sleep, wakeup will be triggered by the next analog compare interrupt
   sei ();
   sleep_cpu ();
-  sleep_disable ();;
+  sleep_disable ();
   power_timer0_enable ();
 
   // Disable power save for PSV_DISABLE_DUR
