@@ -65,6 +65,7 @@
 #define ENTRY_CODE_THR       1000    // Entry code duration threshold in ms
 #define ENTRY_CODE_TIMEOUT   5000    // Entry code timeout duration in ms
 #define PSV_DISABLE_DURATION 500     // Power save disabling duration in ms
+#define OPEN_DOOR_DELAY      500     // Delay in ms before opening the door
 #define DEFAULT_SERIAL_NO    12345   // Default indoor unit serial number
 
 /*
@@ -271,7 +272,7 @@ void loop () {
     // Open the door
     case STATE_OPEN:
       Serial.println("DOOR OPEN\r\n");
-      delay(1000);
+      delay(OPEN_DOOR_DELAY);
       Led.blink (1, 1000, 0);
       sendCommand (CMD_OPEN_DOOR, LEN_32BIT);
       state = STATE_WAIT;
