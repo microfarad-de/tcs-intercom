@@ -41,7 +41,6 @@
 #include <Arduino.h>
 #include <avr/sleep.h>
 #include <avr/power.h>
-#include <avr/wdt.h>
 #include "src/Cli/Cli.h"
 #include "src/Nvm/Nvm.h"
 #include "src/Led/Led.h"
@@ -128,8 +127,6 @@ void sendTcsBusCommand (uint32_t cmd, CmdLength_e cmdLen = LEN_32BIT);
 void sendCommand       (uint32_t cmd, CmdLength_e cmdLen = LEN_32BIT);
 void powerSave         (void);
 int  cmdOpenDoor       (int argc, char **argv);
-int  cmdOutdoorRing    (int argc, char **argv);
-int  cmdIndoorRing     (int argc, char **argv);
 int  cmdTest           (int argc, char **argv);
 int  cmdRom            (int argc, char **argv);
 int  cmdSetSerial      (int argc, char **argv);
@@ -239,7 +236,7 @@ void loop () {
         receivedRingCmd = false;
         // Short duration
         if (Nvm.entryCode[codeIdx] == CODE_SHORT) {
-          if (cmdDt < ENTRY_CODE_THR) {
+          if (cmdDt <= ENTRY_CODE_THR) {
             DEBUG(Cli.xprintf ("SHORT OK idx = %d\r\n\r\n", codeIdx);)
             Led.blink (1, 100, 200);
             codeIdx++;
@@ -297,7 +294,7 @@ void loop () {
   }
 
   if (state == STATE_WAIT && Led.blinking == false) {
-    // Deep sleep
+    // Sleep
     powerSave ();
   }
 }
@@ -319,18 +316,10 @@ void sendCommand (uint32_t cmd, CmdLength_e cmdLen) {
 
 
 /*
- * Command handler functions
+ * Handle open door command
  */
 int cmdOpenDoor (int argc, char **argv) {
   sendCommand (CMD_OPEN_DOOR, LEN_32BIT);
-  return 0;
-}
-int cmdOutdoorRing (int argc, char **argv) {
-  sendCommand (CMD_OUTDOOR_RING, LEN_32BIT);
-  return 0;
-}
-int cmdIndoorRing (int argc, char **argv) {
-  sendCommand (CMD_INDOOR_RING, LEN_32BIT);
   return 0;
 }
 
