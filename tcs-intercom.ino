@@ -158,11 +158,8 @@ void setup() {
   Led.initialize (LED_BUILTIN);
   Cli.init ( SERIAL_BAUD );
 
-  Serial.println ("");
-  Serial.println (F("+ + +  I N T E R C O M  C O N T R O L  + + +"));
-  Serial.println ("");
-  Cli.xprintf    ("V %d.%d.%d\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_MAINT);
-  Serial.println ("");
+  Serial.println (F("\r\n+ + +  I N T E R C O M  C O N T R O L  + + +\r\n"));
+  Cli.xprintf    ("V %d.%d.%d\r\n\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_MAINT);
   Cli.newCmd     ("open"   , "Open door" , cmdOpenDoor);
   Cli.newCmd     ("o"      , "Open door" , cmdOpenDoor);
   Cli.newCmd     ("config" , "Show the system configuration", cmdRom);
@@ -389,8 +386,7 @@ int cmdRom (int argc, char **argv) {
   if (noEntryCode) {
     Serial.print(F("n/a"));
   }
-  Serial.println ("");
-  Serial.println ("");
+  Serial.println (F("\r\n"));
   return 0;
 }
 
