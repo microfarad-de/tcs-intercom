@@ -186,9 +186,10 @@ void loop () {
   static uint32_t cmdTs   = 0;
   static uint32_t cmdDt   = 0;
   static uint8_t  codeIdx = 0;
-  uint32_t ts      = millis ();
-  uint32_t cmdOutRing = CMD_CONSTRUCT(CMD_OUTDOOR_RING);
-  uint32_t cmdInRing  = CMD_CONSTRUCT(CMD_INDOOR_RING);
+  uint32_t ts          = millis ();
+  uint32_t cmdOutRing  = CMD_CONSTRUCT(CMD_OUTDOOR_RING);
+  uint32_t cmdInRing   = CMD_CONSTRUCT(CMD_INDOOR_RING);
+  bool receivedRingCmd = false;
 
   Cli.getCmd ();
 
@@ -213,6 +214,7 @@ void loop () {
       Led.blinkStop ();
       cmdDt = ts - cmdTs;
       cmdTs = ts;
+      receivedRingCmd = true;
     }
   }
 
@@ -221,11 +223,11 @@ void loop () {
     // Waiting for input
     case STATE_WAIT:
       // Command received
-      if (cmdDt > 0) {
+      if (receivedRingCmd) {
+        receivedRingCmd = false;
         DEBUG(Serial.println("START\r\n");)
         Led.blink (1, 100, 200);
         codeIdx = 0;
-        cmdDt   = 0;
         state   = STATE_READ;
       }
       break;
@@ -233,7 +235,8 @@ void loop () {
     // Reading user input
     case STATE_READ:
       // Command received
-      if (cmdDt > 0) {
+      if (receivedRingCmd) {
+        receivedRingCmd = false;
         // Short duration
         if (Nvm.entryCode[codeIdx] == CODE_SHORT) {
           if (cmdDt < ENTRY_CODE_THR) {
@@ -260,7 +263,6 @@ void loop () {
             state = STATE_WAIT;
           }
         }
-        cmdDt = 0;
       }
       // Cmmand end
       if (Nvm.entryCode[codeIdx] == CODE_END) {
@@ -282,7 +284,10 @@ void loop () {
   }
 
   // Code word overflow
-  if (codeIdx >= ENTRY_CODE_SIZE) state = STATE_WAIT;
+  if (codeIdx >= ENTRY_CODE_SIZE) {
+    codeIdx = 0;
+    state   = STATE_WAIT;
+  }
 
   // Timeout
   if (ts - cmdTs > ENTRY_CODE_TIMEOUT && state != STATE_WAIT) {
