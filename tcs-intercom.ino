@@ -166,10 +166,10 @@ void setup() {
   Serial.println ("");
   Cli.xprintf    ("V %d.%d.%d\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_MAINT);
   Serial.println ("");
-  Cli.newCmd     ("o"  , "Open door" , cmdOpenDoor);
-  Cli.newCmd     ("or" , "Outdoor ring" , cmdOutdoorRing);
-  Cli.newCmd     ("ir" , "Indoor ring" , cmdIndoorRing);
-  Cli.newCmd     ("r"  , "Show the system configuration", cmdRom);
+  Cli.newCmd     ("open"   , "Open door" , cmdOpenDoor);
+  Cli.newCmd     ("o"      , "Open door" , cmdOpenDoor);
+  Cli.newCmd     ("config" , "Show the system configuration", cmdRom);
+  Cli.newCmd     ("r"      , "Show the system configuration", cmdRom);
   Cli.newCmd     ("code"   , "Set the door entry code (arg: [binary code, eg. 1101])", cmdSetEntryCode);
   Cli.newCmd     ("serial" , "Set the indoor unit serial number (arg: <number>)"     , cmdSetSerial);
   Cli.showHelp   ();
