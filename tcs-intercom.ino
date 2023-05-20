@@ -56,7 +56,7 @@
 /*
  * Configuration parameters
  */
-#define SERIAL_BAUD          115200  // Serial communication baud rate
+#define SERIAL_BAUD          38400   // Serial communication baud rate
 #define START_BIT            6       // Protocol start bit duration in ms
 #define ONE_BIT              4       // Protocol 1 bit duration in ms
 #define ZERO_BIT             2       // Protocol 0 bit duration in ms
@@ -127,6 +127,8 @@ void sendTcsBusCommand (uint32_t cmd, CmdLength_e cmdLen = LEN_32BIT);
 void sendCommand       (uint32_t cmd, CmdLength_e cmdLen = LEN_32BIT);
 void powerSave         (void);
 int  cmdOpenDoor       (int argc, char **argv);
+int  cmdOutdoorRing    (int argc, char **argv);
+int  cmdIndoorRing     (int argc, char **argv);
 int  cmdTest           (int argc, char **argv);
 int  cmdRom            (int argc, char **argv);
 int  cmdSetSerial      (int argc, char **argv);
@@ -160,8 +162,10 @@ void setup() {
 
   Serial.println (F("\r\n+ + +  I N T E R C O M  C O N T R O L  + + +\r\n"));
   Cli.xprintf    ("V %d.%d.%d\r\n\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_MAINT);
-  Cli.newCmd     ("open"   , "Open door" , cmdOpenDoor);
-  Cli.newCmd     ("o"      , "Open door" , cmdOpenDoor);
+  Cli.newCmd     ("open"   , "Open door"    , cmdOpenDoor);
+  Cli.newCmd     ("o"      , "Open door"    , cmdOpenDoor);
+  Cli.newCmd     ("or"     , "Outdoor ring" , cmdOutdoorRing);
+  Cli.newCmd     ("ir"     , "Indoor ring"  , cmdIndoorRing);
   Cli.newCmd     ("config" , "Show the system configuration", cmdRom);
   Cli.newCmd     ("r"      , "Show the system configuration", cmdRom);
   Cli.newCmd     ("code"   , "Set the door entry code (arg: [binary code, eg. 1101])", cmdSetEntryCode);
@@ -317,6 +321,14 @@ void sendCommand (uint32_t cmd, CmdLength_e cmdLen) {
  */
 int cmdOpenDoor (int argc, char **argv) {
   sendCommand (CMD_OPEN_DOOR, LEN_32BIT);
+  return 0;
+}
+int cmdOutdoorRing (int argc, char **argv) {
+  sendCommand (CMD_OUTDOOR_RING, LEN_32BIT);
+  return 0;
+}
+int cmdIndoorRing (int argc, char **argv) {
+  sendCommand (CMD_INDOOR_RING, LEN_32BIT);
   return 0;
 }
 

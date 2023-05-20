@@ -37,8 +37,8 @@
 
 BOARD_TAG = pro
 BOARD_SUB = 8MHzatmega328
-MONITOR_BAUDRATE = 115200
-#MONITOR_PORT = /dev/ttyUSB0
+MONITOR_BAUDRATE = 38400
+#MONITOR_PORT = /dev/tty.HC-05
 
 ARDMK_DIR = arduino-mk
 #ARDUINO_DIR = /Applications/Arduino.app/Contents/Java
