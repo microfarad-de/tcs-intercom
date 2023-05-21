@@ -31,11 +31,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- * Version: 1.1.0
- * Date:    May 19, 2023
+ * Version: 1.2.0
+ * Date:    May 21, 2023
  */
 #define VERSION_MAJOR 1  // Major version
-#define VERSION_MINOR 1  // Minor version
+#define VERSION_MINOR 2  // Minor version
 #define VERSION_MAINT 0  // Maintenance version
 
 #include <Arduino.h>
