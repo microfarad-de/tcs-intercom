@@ -398,7 +398,7 @@ int cmdRom (int argc, char **argv) {
   if (noEntryCode) {
     Serial.print(F("n/a"));
   }
-  Serial.println (F("\r\n"));
+  Cli.xprintf ("\r\n  V %d.%d.%d\r\n\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_MAINT);
   return 0;
 }
 
