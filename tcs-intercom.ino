@@ -32,7 +32,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
  * Version: 1.2.0
- * Date:    May 21, 2023
+ * Date:    May 29, 2023
  */
 #define VERSION_MAJOR 1  // Major version
 #define VERSION_MINOR 2  // Minor version
@@ -46,7 +46,7 @@
 #include "src/Led/Led.h"
 
 // Enable debug code
-#define DEBUG(_X) //_X
+#define DEBUG(_X) _X
 
 /*
  * Pin assignment
@@ -162,7 +162,6 @@ void setup() {
 
   Serial.println (F("\r\n+ + +  I N T E R C O M  C O N T R O L  + + +\r\n"));
   Cli.xprintf    ("V %d.%d.%d\r\n\r\n", VERSION_MAJOR, VERSION_MINOR, VERSION_MAINT);
-  Cli.newCmd     ("open"   , "Open door"    , cmdOpenDoor);
   Cli.newCmd     ("o"      , "Open door"    , cmdOpenDoor);
   Cli.newCmd     ("or"     , "Outdoor ring" , cmdOutdoorRing);
   Cli.newCmd     ("ir"     , "Indoor ring"  , cmdIndoorRing);
