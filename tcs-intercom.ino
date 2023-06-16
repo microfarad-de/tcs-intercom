@@ -31,11 +31,11 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  *
- * Version: 1.2.0
- * Date:    May 29, 2023
+ * Version: 1.3.0
+ * Date:    June 16, 2023
  */
 #define VERSION_MAJOR 1  // Major version
-#define VERSION_MINOR 2  // Minor version
+#define VERSION_MINOR 3  // Minor version
 #define VERSION_MAINT 0  // Maintenance version
 
 #include <Arduino.h>
@@ -183,6 +183,7 @@ void loop () {
   static uint32_t cmdTs   = 0;
   static uint32_t cmdDt   = 0;
   static uint8_t  codeIdx = 0;
+  static bool     result  = true;
   uint32_t ts          = millis ();
   uint32_t cmdOutRing  = CMD_CONSTRUCT(CMD_OUTDOOR_RING);
   uint32_t cmdInRing   = CMD_CONSTRUCT(CMD_INDOOR_RING);
@@ -225,6 +226,7 @@ void loop () {
         DEBUG(Serial.println("START\r\n");)
         Led.blink (1, 100, 200);
         codeIdx = 0;
+        result  = true;
         state   = STATE_READ;
       }
       break;
@@ -239,31 +241,37 @@ void loop () {
           if (cmdDt <= ENTRY_CODE_THR) {
             DEBUG(Cli.xprintf ("SHORT OK idx = %d\r\n\r\n", codeIdx);)
             Led.blink (1, 100, 200);
-            codeIdx++;
           }
           else {
             DEBUG(Cli.xprintf ("SHORT NOK idx = %d\r\n\r\n", codeIdx);)
             Led.blink (2, 100, 200);
-            state = STATE_WAIT;
+            result = false;
           }
+          codeIdx++;
         }
         // Long duration
         else if (Nvm.entryCode[codeIdx] == CODE_LONG) {
           if (cmdDt > ENTRY_CODE_THR) {
             DEBUG(Cli.xprintf ("LONG OK idx = %d\r\n\r\n", codeIdx);)
             Led.blink (1, 100, 200);
-            codeIdx++;
+
           }
           else {
             DEBUG(Cli.xprintf ("LONG NOK idx = %d\r\n\r\n", codeIdx);)
             Led.blink (2, 100, 200);
-            state = STATE_WAIT;
+            result = false;
           }
+          codeIdx++;
         }
       }
-      // Cmmand end
+      // Command end
       if (Nvm.entryCode[codeIdx] == CODE_END) {
-        state = STATE_OPEN;
+        if (result) {
+          state = STATE_OPEN;
+        }
+        else {
+          state = STATE_WAIT;
+        }
       }
       break;
 
