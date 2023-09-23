@@ -13,7 +13,7 @@ Unless stated otherwise within the source file headers, please feel free to use 
 ## Circuit Diagram
 
 <p align="center">
-<img src="https://raw.githubusercontent.com/microfarad-de/tcs-intercom/master/doc/tcs-intercom-schematic.png" alt="drawing" width="600"/>
+<img src="https://raw.githubusercontent.com/microfarad-de/tcs-intercom/master/doc/tcs-intercom-schematic.png" alt="drawing"/>
 </p>
 
 [tcs-intercom-schematic.pdf](https://raw.githubusercontent.com/microfarad-de/tcs-intercom/master/doc/tcs-intercom-schematic.pdf)
