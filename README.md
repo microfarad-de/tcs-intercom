@@ -36,3 +36,14 @@ Unless stated otherwise within the source file headers, please feel free to use 
  <img src="https://raw.githubusercontent.com/microfarad-de/tcs-intercom/master/doc/perspective-3.jpg" alt="drawing" width="600"/>
  </p>
 
+
+## Notes
+
+This project can be compiled from command line using the via makefile using the following commands
+
+* To build: `make`
+* To clean: `make clean`
+* To generate the release archive: `make release`
+
+This project is configured for using the clangd VSCode plugin for code indexing. In order to use the clangd plugin, `compile_commands.json` file needs to be generated. This file is already part of the rpository, however it needs to be regenerated if new source files have been added to the project. The generation of `compile_commands.json` has been performed using the `compileddb` Python tool (`pip install compiledb`, https://pypi.org/project/compiledb/). The generation si performd using the following command: `compiledb make` .
+
