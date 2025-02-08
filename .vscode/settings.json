@@ -30,6 +30,8 @@
         "string": "cpp",
         "string_view": "cpp",
         "thread": "cpp",
-        "stop_token": "cpp"
+        "stop_token": "cpp",
+        "istream": "cpp",
+        "*.tcc": "cpp"
     }
 }
