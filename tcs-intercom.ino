@@ -167,8 +167,8 @@ void setup() {
   Cli.newCmd     ("ir"     , "Indoor ring"  , cmdIndoorRing);
   Cli.newCmd     ("config" , "Show the system configuration", cmdRom);
   Cli.newCmd     ("r"      , "Show the system configuration", cmdRom);
-  Cli.newCmd     ("code"   , "Set the door entry code (arg: [binary code, eg. 1101])", cmdSetEntryCode);
-  Cli.newCmd     ("serial" , "Set the indoor unit serial number (arg: <number>)"     , cmdSetSerial);
+  Cli.newCmd     ("code"   , "Set the door entry code (arg: <binary code>, eg. 1101])", cmdSetEntryCode);
+  Cli.newCmd     ("serial" , "Set the indoor unit serial number (arg: <number>)"     ,  cmdSetSerial);
   Cli.showHelp   ();
 
   nvmRead ();
